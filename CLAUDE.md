@@ -23,7 +23,7 @@ Changing them invalidates all experiment results.
 ### Running benchmarks
 
 ```bash
-uv run python benchmark.py              # 100k games vs committer
-uv run python benchmark.py --n 10000    # quick test
+uv run python benchmark.py              # 10k games vs committer
+uv run python benchmark.py --n 10000    # quick test with specific number of games
 uv run python wrapper.py challenger committer -n 1  # single verbose game
 ```

@@ -37,14 +37,17 @@ If you need a new helper function, define it inside `players/challenger.py`.
 1. Read `experiments/log.jsonl` to see what has been tried (if it exists)
 2. Read `players/challenger.py` to see the current implementation
 3. Make one change to `players/challenger.py`
-4. Run: `uv run python benchmark.py`
+4. Run the benchmark with description and hypothesis flags:
+   ```
+   uv run python benchmark.py --description 'Brief summary of the code change' --hypothesis 'Why you expect this to improve win rate'
+   ```
 5. Read the JSON output:
    - `"kept": true` → your change was accepted, it improved win rate
    - `"kept": false` → your change was reverted, try something different
 
 ## Game Rules
 
-Lost Cities is a two-player card game with 6 suits (`b g p r w y`) and 12 cards per suit (3 contracts `0` + values `1-9`). Each player builds "expeditions" by playing cards in ascending order per suit.
+Lost Cities is a two-player card game with 6 suits (`b g p r w y`) and 12 cards per suit (3 contracts `0` + values `2-10`). Each player builds "expeditions" by playing cards in ascending order per suit. The opponent's hand is not public and you may not look at it.
 
 **Turn:** Play or discard one card, then draw one card (from deck or a discard pile).
 

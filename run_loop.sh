@@ -16,7 +16,7 @@ for i in $(seq 1 $MAX_EXPERIMENTS); do
     echo ""
     echo "=== Experiment $i / $MAX_EXPERIMENTS ==="
     claude --print --dangerously-skip-permissions \
-        "Read program.md for your instructions. Read experiments/log.jsonl to see past experiment results (if it exists). Read players/challenger.py to see the current code. Make ONE focused change to players/challenger.py to improve its win rate, then run: uv run python benchmark.py. Report whether the change was kept or reverted and why you think it did or didn't work." \
+        "Read program.md for your instructions. Read experiments/log.jsonl to see past experiment results (if it exists). Read players/challenger.py to see the current code. Make ONE focused change to players/challenger.py to improve its win rate, then run the benchmark with --description and --hypothesis flags, e.g.: uv run python benchmark.py --description 'Added card counting for unseen cards' --hypothesis 'Tracking unseen cards will improve draw decisions and increase win rate by ~1%'. The description should briefly state WHAT you changed in the code. The hypothesis should state WHY you expect it to help. Report whether the change was kept or reverted and why you think it did or didn't work." \
         2>&1 | tee "experiments/experiment_${i}.log"
 done
 

@@ -5,7 +5,7 @@ Runs challenger vs an opponent, compares against baseline, and keeps or
 reverts the challenger file based on whether win rate improved.
 
 Usage:
-    uv run python benchmark.py [--opponent committer] [--n 100000]
+    uv run python benchmark.py [--opponent committer] [--n 10000]
 """
 
 import argparse
@@ -85,7 +85,9 @@ def get_next_experiment_id():
 def main():
     parser = argparse.ArgumentParser(description='Benchmark challenger player.')
     parser.add_argument('--opponent', default='committer', help='Opponent player name')
-    parser.add_argument('--n', type=int, default=100000, help='Number of games')
+    parser.add_argument('--n', type=int, default=10000, help='Number of games')
+    parser.add_argument('--hypothesis', default=None, help='What you expect this change to do and why')
+    parser.add_argument('--description', default=None, help='Brief description of the code change made')
     args = parser.parse_args()
 
     os.makedirs(EXPERIMENTS_DIR, exist_ok=True)
@@ -109,6 +111,8 @@ def main():
         record = {
             'experiment_id': experiment_id,
             'timestamp': datetime.now().isoformat(timespec='seconds'),
+            'description': args.description,
+            'hypothesis': args.hypothesis,
             'error': error,
             'opponent': args.opponent,
             'n_games': args.n,
@@ -144,6 +148,8 @@ def main():
     record = {
         'experiment_id': experiment_id,
         'timestamp': datetime.now().isoformat(timespec='seconds'),
+        'description': args.description,
+        'hypothesis': args.hypothesis,
         'win_rate': win_rate,
         'stderr': stderr,
         'n_games': args.n,
