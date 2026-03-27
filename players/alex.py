@@ -485,8 +485,8 @@ class Alex(Player):
     '''
     def play(self, r):
         me = r.whose_turn
-        cards = r.h[me].cards
-        deck_size = len(r.deck)
+        cards = r.hand.cards
+        deck_size = r.deck_size
 
         playable_cards = [c for c in cards
                          if is_playable(c, r.flags[c[0]].played[me])]

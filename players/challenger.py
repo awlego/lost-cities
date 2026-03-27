@@ -310,14 +310,14 @@ class Challenger(Player):
         possible_draws = playable_draws(r.flags, me)
         best_draw, draw_gap, _ = minimize_gap(possible_draws, r.flags, me)
 
-        cards = r.h[me].cards
+        cards = r.hand.cards
         playable_cards = [c for c in cards
                              if is_playable(c, r.flags[c[0]].played[me])]
 
         if playable_cards:
             # Late game: avoid opening new expeditions — not enough turns
             # left to reach breakeven (20 points).
-            if len(r.deck) < 16:
+            if r.deck_size < 16:
                 continuing = [c for c in playable_cards
                               if r.flags[c[0]].played[me]]
                 if continuing:
