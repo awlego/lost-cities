@@ -37,13 +37,14 @@ If you need a new helper function, define it inside `players/challenger.py`.
 1. Read `experiments/log.jsonl` to see what has been tried (if it exists)
 2. Read `players/challenger.py` to see the current implementation
 3. Make one change to `players/challenger.py`
-4. Run the benchmark with description and hypothesis flags:
+4. Git commit your change: `git add players/challenger.py && git commit -m 'description of change'`
+5. Run the benchmark with description and hypothesis flags:
    ```
    uv run python benchmark.py --description 'Brief summary of the code change' --hypothesis 'Why you expect this to improve win rate'
    ```
-5. Read the JSON output:
-   - `"kept": true` → your change was accepted, it improved win rate
-   - `"kept": false` → your change was reverted, try something different
+6. Read the JSON output:
+   - `"kept": true` → your commit is kept, it improved win rate
+   - `"kept": false` → the benchmark reverted your commit via `git reset --hard HEAD~1`
 
 ## Game Rules
 

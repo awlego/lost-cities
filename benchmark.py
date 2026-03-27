@@ -12,37 +12,40 @@ import argparse
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 
 EXPERIMENTS_DIR = 'experiments'
 BASELINE_FILE = os.path.join(EXPERIMENTS_DIR, 'baseline.json')
 LOG_FILE = os.path.join(EXPERIMENTS_DIR, 'log.jsonl')
 CHALLENGER_FILE = 'players/challenger.py'
-CHALLENGER_BASELINE = os.path.join(EXPERIMENTS_DIR, 'challenger.py.baseline')
 
 
 def run_benchmark(opponent, n_games):
-    """Run wrapper.py and return (win_rate, stderr) for the challenger."""
+    """Run wrapper.py and return (win_rate, stderr, error, elapsed_seconds)."""
+    start = time.monotonic()
     try:
         result = subprocess.run(
             [sys.executable, 'wrapper.py', 'challenger', opponent, '-n', str(n_games)],
             capture_output=True, text=True, timeout=300
         )
     except subprocess.TimeoutExpired:
-        return None, None, "Benchmark timed out after 300s"
+        elapsed = round(time.monotonic() - start, 1)
+        return None, None, "Benchmark timed out after 300s", elapsed
+
+    elapsed = round(time.monotonic() - start, 1)
 
     if result.returncode != 0:
         error = result.stderr.strip() or result.stdout.strip()
-        return None, None, f"Benchmark crashed: {error}"
+        return None, None, f"Benchmark crashed: {error}", elapsed
 
     output = result.stdout.strip()
     # wrapper.py prints: "Name wins X.XXXX +/- Y.YYYY"
     match = re.search(r'(\w+)\s+wins\s+([\d.]+)\s+\+/-\s+([\d.]+)', output)
     if not match:
-        return None, None, f"Could not parse output: {output}"
+        return None, None, f"Could not parse output: {output}", elapsed
 
     winner_name = match.group(1).lower()
     win_rate = float(match.group(2))
@@ -52,7 +55,7 @@ def run_benchmark(opponent, n_games):
     if winner_name != 'challenger':
         win_rate = 1.0 - win_rate
 
-    return win_rate, stderr, None
+    return win_rate, stderr, None, elapsed
 
 
 def load_baseline():
@@ -70,6 +73,19 @@ def save_baseline(win_rate, stderr, experiment_id):
             'stderr': stderr,
             'experiment_id': experiment_id
         }, f, indent=2)
+
+
+def git_revert_experiment():
+    """Revert the last commit, but only if it touched challenger.py."""
+    result = subprocess.run(
+        ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'],
+        capture_output=True, text=True
+    )
+    changed_files = result.stdout.strip().split('\n')
+    if CHALLENGER_FILE in changed_files:
+        subprocess.run(['git', 'reset', '--hard', 'HEAD~1'], check=True)
+    else:
+        print(f"WARNING: Last commit did not touch {CHALLENGER_FILE}, skipping git reset", file=sys.stderr)
 
 
 def get_next_experiment_id():
@@ -95,18 +111,12 @@ def main():
     experiment_id = get_next_experiment_id()
     baseline = load_baseline()
 
-    # First run: establish baseline and save the initial challenger file.
-    if baseline is None:
-        # Save the initial challenger as the baseline copy.
-        shutil.copy2(CHALLENGER_FILE, CHALLENGER_BASELINE)
-
     # Run the benchmark.
-    win_rate, stderr, error = run_benchmark(args.opponent, args.n)
+    win_rate, stderr, error, benchmark_seconds = run_benchmark(args.opponent, args.n)
 
     if error:
-        # Failed experiment: revert and log.
-        if os.path.exists(CHALLENGER_BASELINE):
-            shutil.copy2(CHALLENGER_BASELINE, CHALLENGER_FILE)
+        # Failed experiment: revert the commit and log.
+        git_revert_experiment()
 
         record = {
             'experiment_id': experiment_id,
@@ -118,7 +128,8 @@ def main():
             'n_games': args.n,
             'baseline_win_rate': baseline['win_rate'] if baseline else None,
             'improved': False,
-            'kept': False
+            'kept': False,
+            'benchmark_seconds': benchmark_seconds
         }
         with open(LOG_FILE, 'a') as f:
             f.write(json.dumps(record) + '\n')
@@ -131,7 +142,6 @@ def main():
         improved = False
         kept = True
         save_baseline(win_rate, stderr, experiment_id)
-        shutil.copy2(CHALLENGER_FILE, CHALLENGER_BASELINE)
     else:
         # Conservative gating: new lower bound > old upper bound.
         new_lower = win_rate - stderr
@@ -141,9 +151,8 @@ def main():
 
         if kept:
             save_baseline(win_rate, stderr, experiment_id)
-            shutil.copy2(CHALLENGER_FILE, CHALLENGER_BASELINE)
         else:
-            shutil.copy2(CHALLENGER_BASELINE, CHALLENGER_FILE)
+            git_revert_experiment()
 
     record = {
         'experiment_id': experiment_id,
@@ -156,7 +165,8 @@ def main():
         'opponent': args.opponent,
         'baseline_win_rate': baseline['win_rate'] if baseline else win_rate,
         'improved': improved,
-        'kept': kept
+        'kept': kept,
+        'benchmark_seconds': benchmark_seconds
     }
     with open(LOG_FILE, 'a') as f:
         f.write(json.dumps(record) + '\n')
