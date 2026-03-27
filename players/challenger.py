@@ -60,14 +60,15 @@ def best_play(cards, flags, me):
             v = other_c[1]
             if v in values_left:
                 values_left.remove(v)
-        gap = values_left.index(c[1])
+        idx = values_left.index(c[1])
+        # Weighted gap: sum of point values of skipped cards
+        gap_cost = sum(int(v) + 1 for v in values_left[:idx])
 
         # Count remaining playable values in this suit (potential)
         my_top = int(c[1])
         remaining = sum(1 for v in values_left if int(v) > my_top)
 
-        # Score: gap is primary (lower is better), remaining is tiebreaker (higher better)
-        scored.append((-gap, remaining, c))
+        scored.append((-gap_cost, remaining, c))
     scored.sort(reverse=True)
     return scored[0][2]
 
@@ -98,7 +99,8 @@ def minimize_gap(cards, flags, me):
             if v in values_left:
                 values_left.remove(v)
 
-        gap = values_left.index(c[1])
+        idx = values_left.index(c[1])
+        gap = sum(int(v) + 1 for v in values_left[:idx])
         if gap < smallest_gap:
             second_smallest_gap = smallest_gap
             smallest_gap = gap
