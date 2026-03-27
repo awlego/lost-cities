@@ -1,0 +1,25 @@
+#!/bin/bash
+# Autoresearch-style loop for iteratively improving the Lost Cities challenger.
+# Usage: bash run_loop.sh [max_experiments]
+
+MAX_EXPERIMENTS=${1:-50}
+
+mkdir -p experiments
+
+# Establish baseline on first run if needed.
+if [ ! -f experiments/baseline.json ]; then
+    echo "=== Establishing baseline ==="
+    uv run python benchmark.py
+fi
+
+for i in $(seq 1 $MAX_EXPERIMENTS); do
+    echo ""
+    echo "=== Experiment $i / $MAX_EXPERIMENTS ==="
+    claude --print --dangerously-skip-permissions \
+        "Read program.md for your instructions. Read experiments/log.jsonl to see past experiment results (if it exists). Read players/challenger.py to see the current code. Make ONE focused change to players/challenger.py to improve its win rate, then run: uv run python benchmark.py. Report whether the change was kept or reverted and why you think it did or didn't work." \
+        2>&1 | tee "experiments/experiment_${i}.log"
+done
+
+echo ""
+echo "=== Done: $MAX_EXPERIMENTS experiments completed ==="
+echo "Results in experiments/log.jsonl"
