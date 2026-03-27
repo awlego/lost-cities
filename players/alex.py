@@ -2,10 +2,13 @@
 
 Builds on Committer's gap-minimization core with layered heuristics:
 1. Suit EV for tiebreaking between equal-gap plays
-2. Stall awareness in draw decisions
+2. Stall awareness in draw decisions (with tempo override)
 3. Smart discarding that avoids feeding the opponent
 4. Safe discard detection (opponent committed higher)
 5. Late-game filter to avoid opening doomed expeditions
+6. Denial-aware discarding (hold cards that unlock opponent cascades)
+7. Score-aware risk adjustment (conservative when ahead, aggressive when behind)
+8. Deadwood-aware discarding (prioritize shedding hand clogs)
 """
 
 from classes import *
@@ -350,61 +353,6 @@ def card_gap(card, flags, me):
     return gap
 
 
-def suit_ev(suit, hand, flags, me, deck_size):
-    """Estimate expected value of committing to a suit."""
-    my_played = flags[suit].played[me]
-    opp_played = flags[suit].played[1 - me]
-    discards = flags[suit].discards
-
-    hand_in_suit = [c for c in hand if c[0] == suit
-                    and is_playable(c, my_played)]
-
-    committed = my_played + hand_in_suit
-    if not committed:
-        return 0.0
-
-    n_contracts = sum(1 for c in committed if c[1] == '0')
-    multiplier = 1 + n_contracts
-    known_sum = sum_cards(committed)
-
-    # Track seen cards to estimate future draws
-    seen = set()
-    for c in my_played + opp_played + discards:
-        seen.add(c)
-    for c in hand:
-        if c[0] == suit:
-            seen.add(c)
-
-    top_value = 0
-    non_contract = [c for c in committed if c[1] != '0']
-    if non_contract:
-        top_value = int(non_contract[-1][1])
-
-    # Unseen playable cards in this suit
-    unseen_playable = []
-    for v in CARDS:
-        if int(v) >= top_value and v != '0':
-            if suit + v not in seen:
-                unseen_playable.append(int(v))
-
-    if unseen_playable and deck_size > 0:
-        avg_value = sum(v + 1 for v in unseen_playable) / len(unseen_playable)
-        remaining_turns = deck_size / 2
-        draw_prob = len(unseen_playable) / max(deck_size, 1)
-        expected_draws = min(draw_prob * remaining_turns, len(unseen_playable))
-        expected_draw_value = expected_draws * avg_value
-    else:
-        expected_draw_value = 0.0
-        expected_draws = 0.0
-
-    ev = multiplier * (known_sum + expected_draw_value - BREAKEVEN)
-
-    if len(committed) + expected_draws >= BONUS_THRESHOLD:
-        ev += BONUS_POINTS
-
-    return ev
-
-
 def count_desired_plays(hand, flags, me, deck_size):
     """Count cards in hand we actively want to play. Returns (count, should_stall)."""
     n_desired = 0
@@ -443,6 +391,9 @@ def score_discard(card, flags, me, hand, deck_size):
     # Penalize feeding the opponent
     score -= points_for_opponent(card, flags, me)
 
+    # Penalize discarding cards the opponent desperately needs (cascading denial)
+    score -= denial_value(card, flags, me) * 0.5
+
     # Prefer discarding low-value cards
     score -= int(card[1]) * 0.5
 
@@ -456,6 +407,13 @@ def score_discard(card, flags, me, hand, deck_size):
     if ev > 0 and my_playable:
         score -= ev * 0.5
 
+    # Boost discard priority for deadwood (unplayable + unsafe to discard)
+    # These clog the hand — better to shed them even at some denial cost
+    if not my_playable and opp_playable:
+        deadwood = hand_deadwood(hand, flags, me)
+        if card in deadwood:
+            score += 15
+
     return score
 
 
@@ -465,9 +423,25 @@ def best_play(playable_cards, flags, me, hand, deck_size):
     Primary sort: gap (lower is better, like Committer).
     Tiebreaker: suit EV (prefer suits we're invested in or that have good potential).
     Late-game filter: avoid opening new suits when few cards remain.
+    Score-aware: adjust late-game cutoff based on whether winning or losing.
     """
+    # Dynamic late-game cutoff based on score differential
+    diff = score_differential(flags, me)
+    pressure = deck_pressure(deck_size)
+    if pressure > 0.5:
+        if diff > 15:
+            # Comfortably ahead — tighten up, play very conservatively
+            effective_cutoff = LATE_GAME_CUTOFF + 6
+        elif diff < -15:
+            # Behind — loosen up, willing to open new suits later
+            effective_cutoff = LATE_GAME_CUTOFF - 6
+        else:
+            effective_cutoff = LATE_GAME_CUTOFF
+    else:
+        effective_cutoff = LATE_GAME_CUTOFF
+
     # Late-game: filter to only continuing expeditions if possible
-    if deck_size < LATE_GAME_CUTOFF:
+    if deck_size < effective_cutoff:
         continuing = [c for c in playable_cards if flags[c[0]].played[me]]
         if continuing:
             playable_cards = continuing
@@ -503,6 +477,10 @@ class Alex(Player):
     -[x] don't discard obvious plays for your opponents (score_discard)
     -[x] safe discards for cards opponent committed higher to (score_discard)
     -[x] prefer to not open new suits if there is another good play (score_play)
+    -[x] denial-aware discarding — hold cards that unlock opponent cascades (denial_value)
+    -[x] score-aware risk adjustment — conservative when ahead, aggressive when behind
+    -[x] deadwood awareness — prioritize shedding hand clogs
+    -[x] tempo-aware stalling — don't stall when ahead and want game to end fast
     -[ ] hold suits that opponents have committed multiple multipliers too (that would be legal for them to play)
     '''
     def play(self, r):
@@ -521,8 +499,15 @@ class Alex(Player):
         else:
             best_draw_card, draw_gap = '', len(CARDS) + 1
 
-        # Stalling check
+        # Stalling check with tempo override:
+        # If we're winning and have tempo advantage, don't stall — end the game fast
         _, should_stall = count_desired_plays(cards, r.flags, me, deck_size)
+        if should_stall:
+            diff = score_differential(r.flags, me)
+            tempo = tempo_advantage(cards, r.flags, me)
+            if diff > 10 and tempo > 2:
+                # We're winning with tempo — keep playing, don't stall
+                should_stall = False
 
         if playable_cards:
             play_card = best_play(playable_cards, r.flags, me, cards, deck_size)
