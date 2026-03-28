@@ -48,6 +48,74 @@ def _suit_info(r):
     return infos
 
 
+def _card_counting(r):
+    """Compute unseen cards per suit from all visible information."""
+    me = r.whose_turn
+    counts = {}
+    for s in SUITS:
+        # Full deck for this suit: three '0' contracts + one each of '1'-'9'
+        remaining = {}
+        for c in CARDS:
+            remaining[c] = remaining.get(c, 0) + 1
+
+        # Subtract all visible cards
+        for card in r.hand.cards:
+            if card[0] == s:
+                remaining[card[1]] -= 1
+        for card in r.flags[s].played[me]:
+            remaining[card[1]] -= 1
+        for card in r.flags[s].played[1 - me]:
+            remaining[card[1]] -= 1
+        for card in r.flags[s].discards:
+            remaining[card[1]] -= 1
+
+        unseen = {v: c for v, c in remaining.items() if c > 0}
+        unseen_numbers = {v: c for v, c in unseen.items() if v != '0'}
+        counts[s] = {
+            'unseen': unseen,
+            'unseen_total': sum(unseen.values()),
+            'unseen_numbers': unseen_numbers,
+        }
+
+    total_unseen = sum(counts[s]['unseen_total'] for s in SUITS)
+    return counts, total_unseen
+
+
+def _prob_in_deck(total_unseen, deck_size, count):
+    """Probability that at least one of `count` specific unseen cards is in the deck."""
+    if total_unseen <= 0 or deck_size <= 0 or count <= 0:
+        return 0.0
+    opp_hand = total_unseen - deck_size
+    if opp_hand <= 0 or count > opp_hand:
+        return 1.0
+    # P(all target cards in opponent's hand) via hypergeometric
+    p_none = 1.0
+    for i in range(count):
+        p_none *= (opp_hand - i) / (total_unseen - i)
+    return 1.0 - p_none
+
+
+def _one_card_rule(suit, infos, counts, total_unseen, deck_size):
+    """Will playing hand cards + drawing one more reach breakeven (face sum >= 20)?"""
+    hand_face = infos[suit]['hand_face']
+
+    if hand_face >= BREAKEVEN:
+        return True, 1.0
+
+    needed = BREAKEVEN - hand_face
+    # Count unseen number cards whose face value alone fills the gap
+    qualifying = 0
+    for v, cnt in counts[suit]['unseen_numbers'].items():
+        if int(v) + 1 >= needed:
+            qualifying += cnt
+
+    if qualifying == 0:
+        return False, 0.0
+
+    prob = _prob_in_deck(total_unseen, deck_size, qualifying)
+    return prob >= 0.5, prob
+
+
 def _gap(card, flags, me):
     """Count skipped cards (opportunity cost) for playing this card.
     Same logic as Committer's minimize_gap."""
@@ -73,7 +141,7 @@ def _gap(card, flags, me):
     return len(values_left)
 
 
-def _choose_play(r, infos, phase):
+def _choose_play(r, infos, phase, counts, total_unseen):
     """Play aggressively (like Committer) but with strategic opening decisions."""
     me = r.whose_turn
     hand = r.hand.cards
@@ -96,16 +164,20 @@ def _choose_play(r, infos, phase):
         if info['is_started']:
             score += 25  # Strong preference for continuing expeditions
         else:
-            # Opening a new expedition: gate based on hand strength + phase
-            hand_face = info['hand_face']
-            n_hand = len(info['hand_cards'])
+            # Opening a new expedition: use one-card rule
+            should_start, prob = _one_card_rule(s, infos, counts, total_unseen, r.deck_size)
 
-            if phase == 'late' and hand_face < 20:
+            if phase == 'late' and not should_start:
                 score -= 50  # Don't open hopeless expeditions late
-            elif phase == 'mid' and hand_face < 8 and n_hand < 3:
+            elif phase == 'mid' and not should_start:
                 score -= 30  # Be cautious mid-game with weak suits
-            elif phase == 'early' and hand_face < 4 and n_hand < 2:
-                score -= 15  # Even early, avoid single low cards
+            elif phase == 'early':
+                # Early game: be speculative, only penalize truly hopeless
+                n_hand = len(info['hand_cards'])
+                if prob < 0.1 and n_hand < 2:
+                    score -= 15
+            if should_start:
+                score += prob * 5  # Mild confidence bonus
 
         # Contracts: play early, never after numbers
         if c[1] == '0':
@@ -185,7 +257,7 @@ def _estimate_scores(infos):
     return my_score, opp_score
 
 
-def _choose_draw(r, play_card, is_discard, infos):
+def _choose_draw(r, play_card, is_discard, infos, counts, total_unseen):
     """Clock-aware draw: accelerate when ahead, extend when behind.
     Also incorporates Committer's idea: draw from discard if it improves hand."""
     me = r.whose_turn
@@ -220,6 +292,10 @@ def _choose_draw(r, play_card, is_discard, infos):
             # Weak suit: usually not worth it
             draw_score = face_val * 0.1
 
+        # Card scarcity: known good card is more valuable when few unseen remain
+        if counts[s]['unseen_total'] <= 2:
+            draw_score += 3
+
         # Clock control
         if ahead:
             draw_score -= 5  # Strong preference for deck (end game fast)
@@ -241,6 +317,7 @@ class Expedition(Player):
     def play(self, r):
         phase = _game_phase(r.deck_size)
         infos = _suit_info(r)
-        card, is_discard = _choose_play(r, infos, phase)
-        draw = _choose_draw(r, card, is_discard, infos)
+        counts, total_unseen = _card_counting(r)
+        card, is_discard = _choose_play(r, infos, phase, counts, total_unseen)
+        draw = _choose_draw(r, card, is_discard, infos, counts, total_unseen)
         return card, is_discard, draw
