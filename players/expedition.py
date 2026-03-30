@@ -44,6 +44,7 @@ def _suit_info(r):
             'opp_contracts': sum(1 for c in opp_played if c[1] == '0'),
             'hand_face': sum_cards(hand_cards),
             'has_number_played': any(c[1] != '0' for c in my_played),
+            'discard_count': len(r.flags[s].discards),
         }
     return infos
 
@@ -116,6 +117,33 @@ def _one_card_rule(suit, infos, counts, total_unseen, deck_size):
     return prob >= 0.5, prob
 
 
+def _bonus_chase(suit, infos, counts, phase):
+    """Check if the 8-card bonus is worth chasing for this suit.
+    Returns (viable, numbers_still_needed) where viable means we should
+    invest extra in this suit for the bonus."""
+    info = infos[suit]
+    if not info['is_started'] or info['my_contracts'] < 1:
+        return False, 99
+
+    numbers_played = len(info['my_played']) - info['my_contracts']
+    hand_numbers = sum(1 for hc in info['hand_cards'] if hc[1] != '0')
+    numbers_still_needed = (BONUS_THRESHOLD - info['my_contracts']) - (numbers_played + hand_numbers)
+
+    if numbers_still_needed <= 0:
+        return False, 0  # Already there, no extra chase needed
+
+    if phase == 'late' and numbers_still_needed > 2:
+        return False, numbers_still_needed
+
+    unseen_numbers = sum(counts[suit]['unseen_numbers'].values())
+    if unseen_numbers < numbers_still_needed:
+        return False, numbers_still_needed
+
+    # Viable: opponent discarding this suit is a good signal (cards available)
+    viable = numbers_still_needed <= 3 + info['discard_count']
+    return viable, numbers_still_needed
+
+
 def _gap(card, flags, me):
     """Count skipped cards (opportunity cost) for playing this card.
     Same logic as Committer's minimize_gap."""
@@ -149,7 +177,7 @@ def _choose_play(r, infos, phase, counts, total_unseen):
     playable = [c for c in hand if is_playable(c, r.flags[c[0]].played[me])]
 
     if not playable:
-        return _choose_discard(r, infos, me), True
+        return _choose_discard(r, infos, me, counts, phase), True
 
     # Score each playable card
     scored = []
@@ -195,6 +223,12 @@ def _choose_play(r, infos, phase, counts, total_unseen):
         # Prefer suits with more hand cards (better investment)
         score += len(info['hand_cards']) * 1.5
 
+        # 8-card bonus pursuit: incentivize building toward 8 cards,
+        # especially via the wager route (3 wagers = only 5 numbers needed)
+        viable, needed = _bonus_chase(s, infos, counts, phase)
+        if viable:
+            score += 5
+
         scored.append((score, c))
 
     scored.sort(reverse=True)
@@ -202,22 +236,26 @@ def _choose_play(r, infos, phase, counts, total_unseen):
 
     # If best play is significantly penalized, consider discarding instead
     if best_score < -20 and not infos[best_card[0]]['is_started']:
-        return _choose_discard(r, infos, me), True
+        return _choose_discard(r, infos, me, counts, phase), True
 
     return best_card, False
 
 
-def _choose_discard(r, infos, me):
+def _choose_discard(r, infos, me, counts, phase):
     """Pick the least damaging card to discard."""
     hand = r.hand.cards
 
-    # Protect started suits and strong hand suits
+    # Protect started suits, strong hand suits, and bonus-viable suits
     protected = set()
     for s in SUITS:
         info = infos[s]
         if info['is_started']:
             protected.add(s)
         elif info['hand_face'] >= 10 and len(info['hand_cards']) >= 2:
+            protected.add(s)
+        # Protect suits on the 8-card bonus path
+        viable, _ = _bonus_chase(s, infos, counts, phase)
+        if viable:
             protected.add(s)
 
     unprotected = [c for c in hand if c[0] not in protected]
@@ -257,7 +295,7 @@ def _estimate_scores(infos):
     return my_score, opp_score
 
 
-def _choose_draw(r, play_card, is_discard, infos, counts, total_unseen):
+def _choose_draw(r, play_card, is_discard, infos, counts, total_unseen, phase):
     """Clock-aware draw: accelerate when ahead, extend when behind.
     Also incorporates Committer's idea: draw from discard if it improves hand."""
     me = r.whose_turn
@@ -296,6 +334,11 @@ def _choose_draw(r, play_card, is_discard, infos, counts, total_unseen):
         if counts[s]['unseen_total'] <= 2:
             draw_score += 3
 
+        # 8-card bonus pursuit: prefer drawing cards that feed bonus-viable suits
+        viable, _ = _bonus_chase(s, infos, counts, phase)
+        if viable:
+            draw_score += 4
+
         # Clock control
         if ahead:
             draw_score -= 5  # Strong preference for deck (end game fast)
@@ -319,5 +362,5 @@ class Expedition(Player):
         infos = _suit_info(r)
         counts, total_unseen = _card_counting(r)
         card, is_discard = _choose_play(r, infos, phase, counts, total_unseen)
-        draw = _choose_draw(r, card, is_discard, infos, counts, total_unseen)
+        draw = _choose_draw(r, card, is_discard, infos, counts, total_unseen, phase)
         return card, is_discard, draw
