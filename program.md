@@ -10,7 +10,7 @@ Maximize the win rate of `players/challenger.py` against `committer` in the Lost
 2. The class must remain named `Challenger` with `get_name` returning `'challenger'`
 3. Only stdlib imports (no pip packages)
 4. You may use anything from `utils.py` and `classes.py`
-5. Make ONE focused change per iteration
+5. Must be fast: 100k games must complete in under 60 seconds
 
 ## Off-Limits Files — DO NOT MODIFY
 
@@ -32,81 +32,90 @@ would invalidate all benchmarks and break the experiment loop.
 
 If you need a new helper function, define it inside `players/challenger.py`.
 
+## Iteration Strategy
+
+Each iteration operates in one of two modes. Choose the right one based on the
+experiment log before writing any code.
+
+### Exploitation (small optimization)
+
+- Tune thresholds, reorder logic, refine heuristics, add edge cases
+- Make ONE focused change per iteration
+- Use when the last 2-3 iterations showed steady gains and the current
+  architecture still has obvious room for improvement
+
+### Exploration (architectural rewrite)
+
+- Replace the entire decision-making approach with a fundamentally different one
+  (see Architecture Archetypes below)
+- A rewrite should still be a single coherent commit, but it can
+  touch every line in the file
+- Use when:
+  - Win rate has plateaued (≤0.5% change over 10+ kept iterations)
+  - You have a hypothesis for a fundamentally different approach
+  - The current architecture makes a category of improvement impossible
+    (e.g., no amount of threshold tuning will add card counting)
+  - 3+ consecutive iterations have been reverted
+  - You simply have a fun or weird idea you want to try
+
+When exploring, preserve a summary of the previous architecture's best ideas
+in a comment block at the top of `challenger.py` so good discoveries survive
+rewrites. For example:
+
+```python
+# === Lessons from previous architectures ===
+# - Contract threshold of 15+ expected points worked well
+# - Drawing from opponent discard piles defensively improved win rate ~2%
+# - Endgame cutoff at deck < 8 was better than deck < 10
+# ============================================
+```
+
+## Architecture Archetypes
+
+Don't get stuck in one paradigm. Here are fundamentally different approaches to
+consider. Each one can be combined with ideas from the others. There are many more than these.
+
+- **Heuristic priority chain**: Ordered if/else rules — simple, fast, easy to tune,
+  but rigid and hard to make holistic decisions with
+- **Scoring function**: Assign a numeric score to every legal (play, draw) pair and
+  pick the max — flexible, easy to add factors, naturally handles tradeoffs
+- **Monte Carlo rollouts**: Simulate random game completions to estimate move EV —
+  powerful but must stay within speed budget (100k games < 60s)
+- **Phased strategy**: Distinct logic for early game (deck > 30), mid game, and
+  endgame (deck < 10) — captures how optimal play shifts over a game
+- **Opponent modeling + denial**: Track opponent plays/draws to infer their hand
+  and priorities, then optimize against that model
+- **Card counting + EV**: Track all unseen cards, compute expected future value
+  per expedition before committing resources
+- **Hybrid approaches**: e.g., scoring function with phase-dependent weights and
+  card counting inputs — often the strongest but most complex
+
+When an exploration rewrite is triggered, pick an archetype you haven't tried yet
+(or a novel hybrid) rather than reskinning the same logic.
+
 ## Workflow
 
 1. Read `experiments/log.jsonl` to see what has been tried (if it exists)
-2. Read `players/challenger.py` to see the current implementation
-3. Make one change to `players/challenger.py`
-4. Git commit your change: `git add players/challenger.py && git commit -m 'description of change'`
-5. Run the benchmark with description and hypothesis flags:
+2. Assess the trend and choose Exploitation or Exploration mode (see above)
+3. Read `players/challenger.py` to see the current implementation
+4. Make your change to `players/challenger.py`
+5. Git commit your change: `git add players/challenger.py && git commit -m 'description of change'`
+6. Run the benchmark with description and hypothesis flags:
    ```
    uv run python benchmark.py --description 'Brief summary of the code change' --hypothesis 'Why you expect this to improve win rate'
    ```
-6. Read the JSON output:
+7. Read the JSON output:
    - `"kept": true` → your commit is kept, it improved win rate
    - `"kept": false` → the benchmark reverted your commit via `git reset --hard HEAD~1`
 
-## Game Rules
+## Reading the Log
 
-Lost Cities is a two-player card game with 6 suits (`b g p r w y`) and 12 cards per suit (3 contracts `0` + values `2-10`). Each player builds "expeditions" by playing cards in ascending order per suit. The opponent's hand is not public and you may not look at it.
+Before each iteration, read `experiments/log.jsonl` and assess:
 
-**Turn:** Play or discard one card, then draw one card (from deck or a discard pile).
+- **Current win rate** — your baseline to beat
+- **Trend** — are the last 3-5 kept iterations showing gains, or has it flattened?
+- **Consecutive reverts** — how many attempts in a row have failed?
+- **Architecture history** — what approaches have been tried and how did they perform?
 
-**Scoring per suit:**
-- Sum card face values (each card's digit + 1), subtract 20 (the expedition cost)
-- Multiply by (1 + number of contracts played in that suit)
-- If 8+ cards played in a suit, add 20 bonus points
-- Unopened expeditions score 0 (not negative)
+Use this analysis to pick your mode and to avoid repeating failed ideas.
 
-**Card encoding:** Two chars `[suit][value]`, e.g. `'b3'` = blue 4-point card, `'r0'` = red contract.
-
-## Available State in `play(self, r)`
-
-```python
-me = r.whose_turn                    # Your seat (0 or 1)
-r.h[me].cards                        # Your hand (list of card strings)
-r.flags[suit].played[me]             # Cards you've played in this suit
-r.flags[suit].played[1-me]           # Cards opponent played in this suit
-r.flags[suit].discards               # Face-up discard pile for this suit
-len(r.deck)                          # Cards remaining in draw pile
-```
-
-Opponent's hand is hidden. Deck contents are hidden.
-
-## Utility Functions (from utils.py)
-
-- `is_playable(card, played)` — can this card be played on this expedition?
-- `playable_draws(flags, me)` — cards available from discard piles that you can play
-- `minimize_gap(cards, flags, me)` — find the card that skips fewest values
-- `discard_intelligently(cards, flags, me)` — pick the least-damaging discard
-- `safe_discards(cards, flags, me)` — cards opponent can't use
-- `useless_discards(cards, flags, me)` — cards neither player can use
-- `sum_cards(cards)` — total face value of a card list
-
-## Constants (from classes.py)
-
-```python
-SUITS = 'bgprwy'      # 6 suits
-CARDS = '000123456789' # 12 cards per suit (3 zeros = contracts)
-HAND_SIZE = 8
-BREAKEVEN = 20         # Cost to open an expedition
-BONUS_THRESHOLD = 8    # Cards needed for +20 bonus
-BONUS_POINTS = 20
-```
-
-## Strategy Ideas
-
-- **Card counting**: Track which cards are still unseen to estimate probabilities
-- **Opponent modeling**: Infer what suits they're collecting from their plays/draws
-- **Expected value**: Calculate EV before opening an expedition (consider cards remaining)
-- **Endgame awareness**: Adjust strategy based on `len(r.deck)` — be more aggressive early, conservative late
-- **Denial play**: Avoid discarding cards the opponent needs; draw from their discard piles defensively
-- **Contract optimization**: Contracts multiply both gains AND losses — only play when the expedition will clearly profit
-- **Suit selection**: Focus on fewer suits rather than spreading thin
-- **Draw optimization**: Drawing from discard piles gives information; drawing from deck is random but doesn't tip your hand
-
-## Constraints
-
-- Must be fast: 100k games must complete in under 60 seconds
-- No external dependencies
-- No file I/O or network calls from within the player
