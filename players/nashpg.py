@@ -5,6 +5,7 @@ a standard Player in this framework.  Only requires torch at runtime — no
 pyspiel dependency.
 
 Usage:
+    python wrapper.py nashpg committer -n 1000
     NASHPG_CHECKPOINT=/path/to/checkpoint python wrapper.py nashpg committer -n 1000
 """
 
@@ -144,8 +145,13 @@ class NashPG(Player):
 
         checkpoint_dir = os.environ.get('NASHPG_CHECKPOINT')
         if not checkpoint_dir:
-            raise ValueError(
-                'Set NASHPG_CHECKPOINT=/path/to/checkpoint to use the NashPG player')
+            # Default to the bundled checkpoint.
+            default = pathlib.Path(__file__).parent / 'nashpg-checkpoints' / 'v2_1024x2_mc0.2'
+            if default.exists():
+                checkpoint_dir = str(default)
+            else:
+                raise ValueError(
+                    'Set NASHPG_CHECKPOINT=/path/to/checkpoint to use the NashPG player')
 
         checkpoint_dir = pathlib.Path(checkpoint_dir)
 

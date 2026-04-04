@@ -7,7 +7,7 @@ import sys
 import re
 import concurrent.futures
 
-PLAYERS = ['alex', 'challenger', 'committer', 'discarder', 'expedition', 'granny', 'kenny']
+PLAYERS = ['alex', 'challenger', 'committer', 'discarder', 'expedition', 'granny', 'kenny', 'nashpg']
 N = 10000
 
 
