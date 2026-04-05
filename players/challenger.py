@@ -346,6 +346,12 @@ def best_play(cards, flags, me):
         # potential tiebreaker has more influence on suit selection
         gap_cost = sum((int(v) + 1) ** 0.5 for v in values_left[:idx])
 
+        # Multiplier amplifies gap cost: contracts make skipped cards hurt more
+        mult = 1 + sum(1 for p in played if p[1] == '0')
+        if c[1] == '0':
+            mult += 1
+        gap_cost *= mult
+
         # Count remaining playable values in this suit (potential)
         my_top = int(c[1])
         remaining = sum(1 for v in values_left if int(v) > my_top)
