@@ -312,7 +312,7 @@ class Challenger(Player):
         if playable_cards:
             # Late game: avoid opening new expeditions — not enough turns
             # left to reach breakeven (20 points).
-            if r.deck_size < 16:
+            if r.deck_size < 12:
                 continuing = [c for c in playable_cards
                               if r.flags[c[0]].played[me]]
                 if continuing:
