@@ -305,11 +305,6 @@ class Challenger(Player):
 
     def play(self, r):
         me = r.whose_turn
-
-        draw = 'deck'
-        possible_draws = playable_draws(r.flags, me)
-        best_draw, draw_gap, _ = minimize_gap(possible_draws, r.flags, me)
-
         cards = r.hand.cards
         playable_cards = [c for c in cards
                              if is_playable(c, r.flags[c[0]].played[me])]
@@ -324,15 +319,10 @@ class Challenger(Player):
                     playable_cards = continuing
 
             play = best_play(playable_cards, r.flags, me)
-            _, _, second_best_gap = minimize_gap(playable_cards, r.flags, me)
-            if draw_gap < second_best_gap:  # This draw improves your hand.
-                draw = best_draw
-            return play, False, draw
+            return play, False, 'deck'
         else:
             discard = discard_intelligently(cards, r.flags, me)
-            if draw[0] == discard[0]:  # Don't discard to the pile you'll draw
-                draw = 'deck'          # from; instead, draw from the deck.
-            return discard, True, draw
+            return discard, True, 'deck'
 
 
 def best_play(cards, flags, me):
@@ -352,8 +342,9 @@ def best_play(cards, flags, me):
             if v in values_left:
                 values_left.remove(v)
         idx = values_left.index(c[1])
-        # Weighted gap: sum of point values of skipped cards
-        gap_cost = sum(int(v) + 1 for v in values_left[:idx])
+        # Sqrt-compressed gap: compresses value differences so the remaining-
+        # potential tiebreaker has more influence on suit selection
+        gap_cost = sum((int(v) + 1) ** 0.5 for v in values_left[:idx])
 
         # Count remaining playable values in this suit (potential)
         my_top = int(c[1])
