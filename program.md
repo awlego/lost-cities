@@ -32,6 +32,57 @@ would invalidate all benchmarks and break the experiment loop.
 
 If you need a new helper function, define it inside `players/challenger.py`.
 
+## Execution Model
+
+You are a single long-lived Claude session running an open-ended research loop.
+Execute experiments indefinitely until the user manually interrupts you (Ctrl+C).
+
+### Your Loop
+
+Repeat the following cycle without pausing or asking for permission:
+
+1. **Analyze** — Review recent results (from conversation context) and decide
+   whether to exploit or explore (see Iteration Strategy below)
+2. **Implement** — Make your change to `players/challenger.py`
+3. **Commit** — `git add players/challenger.py && git commit -m 'description'`
+4. **Benchmark** — Run `uv run python benchmark.py --description '...' --hypothesis '...'`
+5. **Interpret** — Read the JSON output. If kept, note the new baseline. If reverted
+   or errored, diagnose why and factor it into your next decision.
+6. **Go to 1** — Do not pause. Do not ask "should I continue?" Do not summarize
+   and wait for input. Just start the next experiment.
+
+### Autonomy Directive
+
+- Never pause to ask the user for permission or confirmation
+- Never say "shall I continue?" or "would you like me to try another approach?"
+- Never output a summary and then stop — always proceed to the next experiment
+- The user will interrupt you with Ctrl+C when they want you to stop
+- You are expected to run dozens or hundreds of experiments autonomously
+
+### Timeout and Crash Handling
+
+- `benchmark.py` enforces a 300-second timeout internally. If your code is too
+  slow, the benchmark will time out, revert your commit, and return an error.
+  Treat this as a failed experiment and move on.
+- If the benchmark crashes (exit code 1 with an error message), read the error:
+  - **Syntax error or obvious bug**: Fix it immediately, re-commit, and re-run
+  - **Fundamental design flaw** (e.g., impossible import, wrong class structure):
+    Abandon the approach and try something different
+  - **Intermittent/unclear error**: Try one more time; if it fails again, move on
+- If you encounter a git conflict or dirty working tree, run `git status` to
+  diagnose, then `git checkout players/challenger.py` to reset and continue
+
+### Context Management
+
+- You remember recent experiments from conversation context — you do not need to
+  re-read `experiments/log.jsonl` every iteration
+- Re-read `experiments/log.jsonl` in these situations:
+  - At the very start of your session (iteration 1)
+  - Every 10 experiments, as a checkpoint against context drift
+  - After any crash or error, to confirm the log state
+  - When you want to review long-term trends across more experiments than you
+    can remember from context
+
 ## Iteration Strategy
 
 Each iteration operates in one of two modes. Choose the right one based on the
@@ -93,24 +144,25 @@ consider. Each one can be combined with ideas from the others. There are many mo
 When an exploration rewrite is triggered, pick an archetype you haven't tried yet
 (or a novel hybrid) rather than reskinning the same logic.
 
-## Workflow
+## Workflow Per Iteration
 
-1. Read `experiments/log.jsonl` to see what has been tried (if it exists)
-2. Assess the trend and choose Exploitation or Exploration mode (see above)
-3. Read `players/challenger.py` to see the current implementation
-4. Make your change to `players/challenger.py`
-5. Git commit your change: `git add players/challenger.py && git commit -m 'description of change'`
-6. Run the benchmark with description and hypothesis flags:
+1. Decide Exploitation or Exploration mode based on recent results
+2. Read `players/challenger.py` to see the current implementation
+3. Make your change to `players/challenger.py`
+4. Git commit: `git add players/challenger.py && git commit -m 'description of change'`
+5. Run the benchmark:
    ```
    uv run python benchmark.py --description 'Brief summary of the code change' --hypothesis 'Why you expect this to improve win rate'
    ```
-7. Read the JSON output:
-   - `"kept": true` → your commit is kept, it improved win rate
-   - `"kept": false` → the benchmark reverted your commit via `git reset --hard HEAD~1`
+6. Read the JSON output:
+   - `"kept": true` → your commit is kept, note the new baseline win rate
+   - `"kept": false` → benchmark reverted your commit via `git reset --hard HEAD~1`
+   - Error/crash → see Timeout and Crash Handling above
+7. Immediately begin the next iteration (go to step 1)
 
 ## Reading the Log
 
-Before each iteration, read `experiments/log.jsonl` and assess:
+When you read `experiments/log.jsonl` (see Context Management for when), assess:
 
 - **Current win rate** — your baseline to beat
 - **Trend** — are the last 3-5 kept iterations showing gains, or has it flattened?
@@ -118,4 +170,17 @@ Before each iteration, read `experiments/log.jsonl` and assess:
 - **Architecture history** — what approaches have been tried and how did they perform?
 
 Use this analysis to pick your mode and to avoid repeating failed ideas.
+
+## Session Startup
+
+When you first begin:
+
+1. Read `experiments/log.jsonl` (if it exists) to understand the full history
+2. Read `players/challenger.py` to see the current implementation
+3. Assess the current win rate, trend, and what has been tried
+4. Begin your first experiment — do not output a lengthy analysis first,
+   just note your plan in 1-2 sentences and start coding
+
+If there is no `log.jsonl` yet, the baseline has already been established.
+Start with a simple improvement to the default challenger.
 

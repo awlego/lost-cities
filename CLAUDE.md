@@ -4,8 +4,8 @@ A two-player card game engine with AI player agents.
 
 ## Autoresearch Harness
 
-When running as part of the autoresearch loop (`run_loop.sh`), the AI agent
-improves `players/challenger.py` iteratively against a benchmark.
+A single long-lived Claude session improves `players/challenger.py` iteratively
+against a benchmark, running experiments autonomously until interrupted.
 
 ### Editable file
 
@@ -33,3 +33,12 @@ uv run python benchmark.py --n 10000    # quick test with specific number of gam
 uv run python wrapper.py challenger committer -n 1  # single verbose game
 uv run python wrapper.py nashpg committer -n 1000   # nashpg vs committer
 ```
+
+### Autoresearch mode
+
+```bash
+bash run_loop.sh    # Launch autonomous research session (Ctrl+C to stop)
+```
+
+The session runs indefinitely, modifying `players/challenger.py` and benchmarking
+each change. See `program.md` for the full protocol.
