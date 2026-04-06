@@ -298,6 +298,18 @@ def tempo_advantage(hand, flags, me):
     my_total_played = sum(len(flags[s].played[me]) for s in SUITS)
     return my_playable + my_total_played - opp_total_played
 
+def denial_discard(cards, flags, me):
+    """Discard to minimize opponent benefit."""
+    useless = useless_discards(cards, flags, me)
+    if useless:
+        return min(useless, key=lambda c: int(c[1]))
+    safe = safe_discards(cards, flags, me)
+    if safe:
+        return min(safe, key=lambda c: int(c[1]))
+    # All cards playable by opponent — minimize their benefit
+    return min(cards, key=lambda c: points_for_opponent(c, flags, me))
+
+
 class Challenger(Player):
     @classmethod
     def get_name(cls):
@@ -321,7 +333,7 @@ class Challenger(Player):
             play = best_play(playable_cards, r.flags, me)
             return play, False, 'deck'
         else:
-            discard = discard_intelligently(cards, r.flags, me)
+            discard = denial_discard(cards, r.flags, me)
             return discard, True, 'deck'
 
 
@@ -352,9 +364,9 @@ def best_play(cards, flags, me):
             mult += 1
         gap_cost *= mult ** 0.7
 
-        # Count remaining playable values in this suit (potential)
+        # Value-weighted remaining
         my_top = int(c[1])
-        remaining = sum(1 for v in values_left if int(v) > my_top)
+        remaining = sum(int(v) + 1 for v in values_left if int(v) > my_top)
 
         scored.append((-gap_cost, remaining, c))
     scored.sort(reverse=True)
