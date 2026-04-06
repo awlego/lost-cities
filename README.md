@@ -33,50 +33,58 @@ python wrapper.py kenny committer -n 100000 -j 4
 
 ### Available players
 
-kenny, discarder, granny, committer, expedition, alex, challenger, ismcts, nashpg
+kenny, discarder, granny, committer, expedition, challenger, marathon, ismcts, nashpg
 
 **Note:** `ismcts` (Information Set Monte Carlo Tree Search) is extremely slow.
 A 10k-game benchmark can take hours. Only use it if you're prepared to wait.
 
 ## Round Robin Results
 
-10,000 games per matchup (ismcts excluded due to speed). Date: 2026-04-03.
+10,000 games per matchup (ismcts excluded due to speed). Date: 2026-04-05.
 
 | Matchup | Winner | Win Rate |
 |---|---|---|
-| alex vs challenger | Challenger | 0.5117 +/- 0.0050 |
-| alex vs committer | Committer | 0.5066 +/- 0.0050 |
-| alex vs discarder | Alex | 0.8192 +/- 0.0038 |
-| alex vs expedition | Alex | 0.6405 +/- 0.0048 |
-| alex vs granny | Alex | 0.8958 +/- 0.0031 |
-| alex vs kenny | Alex | 0.9017 +/- 0.0030 |
-| challenger vs committer | Challenger | 0.5098 +/- 0.0050 |
-| challenger vs discarder | Challenger | 0.8569 +/- 0.0035 |
-| challenger vs expedition | Challenger | 0.6772 +/- 0.0047 |
-| challenger vs granny | Challenger | 0.8924 +/- 0.0031 |
-| challenger vs kenny | Challenger | 0.9105 +/- 0.0029 |
-| committer vs discarder | Committer | 0.8254 +/- 0.0038 |
-| committer vs expedition | Committer | 0.6526 +/- 0.0048 |
-| committer vs granny | Committer | 0.9149 +/- 0.0028 |
-| committer vs kenny | Committer | 0.9131 +/- 0.0028 |
-| discarder vs expedition | Expedition | 0.7451 +/- 0.0044 |
-| discarder vs granny | Granny | 0.8533 +/- 0.0035 |
-| discarder vs kenny | Discarder | 0.5039 +/- 0.0050 |
-| expedition vs granny | Expedition | 0.8574 +/- 0.0035 |
-| expedition vs kenny | Expedition | 0.8346 +/- 0.0037 |
-| granny vs kenny | Granny | 0.8529 +/- 0.0035 |
+| challenger vs committer | Challenger | 0.5383 +/- 0.0050 |
+| challenger vs discarder | Challenger | 0.8748 +/- 0.0033 |
+| challenger vs expedition | Challenger | 0.6624 +/- 0.0047 |
+| challenger vs granny | Challenger | 0.7303 +/- 0.0044 |
+| challenger vs kenny | Challenger | 0.8755 +/- 0.0033 |
+| challenger vs marathon | Challenger | 0.5356 +/- 0.0050 |
+| challenger vs nashpg | Challenger | 0.6803 +/- 0.0047 |
+| committer vs discarder | Committer | 0.8179 +/- 0.0039 |
+| committer vs expedition | Committer | 0.6473 +/- 0.0048 |
+| committer vs granny | Committer | 0.9198 +/- 0.0027 |
+| committer vs kenny | Committer | 0.9154 +/- 0.0028 |
+| committer vs marathon | Committer | 0.5060 +/- 0.0050 |
+| committer vs nashpg | Committer | 0.6207 +/- 0.0049 |
+| discarder vs expedition | Expedition | 0.7402 +/- 0.0044 |
+| discarder vs granny | Granny | 0.8496 +/- 0.0036 |
+| discarder vs kenny | Kenny | 0.5020 +/- 0.0050 |
+| discarder vs marathon | Marathon | 0.8539 +/- 0.0035 |
+| discarder vs nashpg | Nashpg | 0.8180 +/- 0.0039 |
+| expedition vs granny | Expedition | 0.8650 +/- 0.0034 |
+| expedition vs kenny | Expedition | 0.8386 +/- 0.0037 |
+| expedition vs marathon | Marathon | 0.6386 +/- 0.0048 |
+| expedition vs nashpg | Expedition | 0.5065 +/- 0.0050 |
+| granny vs kenny | Granny | 0.8553 +/- 0.0035 |
+| granny vs marathon | Marathon | 0.8031 +/- 0.0040 |
+| granny vs nashpg | Nashpg | 0.6003 +/- 0.0049 |
+| kenny vs marathon | Marathon | 0.8864 +/- 0.0032 |
+| kenny vs nashpg | Nashpg | 0.8359 +/- 0.0037 |
+| marathon vs nashpg | Marathon | 0.6529 +/- 0.0048 |
 
 ### Rankings
 
 | Rank | Player | W-L | Notes |
 |---|---|---|---|
-| 1 | Challenger | 5-1 | Top 3 are tightly clustered (~1% margins) |
-| 2 | Committer | 4-2 | Narrow losses to challenger and alex |
-| 3 | Alex | 4-2 | Narrow losses to challenger and committer |
-| 4 | Expedition | 3-3 | Beats bottom 3 convincingly |
-| 5 | Granny | 2-4 | Dominates kenny and discarder |
-| 6 | Discarder | 1-5 | Barely beats kenny |
-| 7 | Kenny | 0-6 | Last place |
+| 1 | Challenger | 7-0 | Undefeated; narrow wins over committer and marathon |
+| 2 | Committer | 5-2 | Loses narrowly to challenger; tied with marathon |
+| 3 | Marathon | 5-2 | Chases 8+ card bonus (3x committer rate); tied with committer |
+| 4 | NashPG | 4-3 | Neural net player; tight matchup with expedition |
+| 5 | Expedition | 3-4 | Beats bottom 3 convincingly |
+| 6 | Granny | 2-5 | Dominates kenny and discarder |
+| 7 | Kenny | 1-6 | Barely edges discarder |
+| 8 | Discarder | 0-7 | Last place |
 
 ## NashPG Player
 
