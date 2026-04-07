@@ -330,17 +330,21 @@ class Challenger(Player):
                 if continuing:
                     playable_cards = continuing
 
-            play = best_play(playable_cards, r.flags, me)
+            if r.deck_size <= 2:
+                play = max(playable_cards, key=lambda c: (
+                    score_expedition(r.flags[c[0]].played[me] + [c]) -
+                    score_expedition(r.flags[c[0]].played[me])
+                ))
+            else:
+                play = best_play(playable_cards, r.flags, me, r.deck_size)
             return play, False, 'deck'
         else:
             discard = denial_discard(cards, r.flags, me)
             return discard, True, 'deck'
 
 
-def best_play(cards, flags, me):
-    """Pick the best card to play: gap-based with remaining tiebreaker.
-    Primary: minimize sqrt-compressed gap * mult^0.7
-    Tiebreaker: maximize value-weighted remaining above played card."""
+def best_play(cards, flags, me, deck_size=44):
+    """Pick the best card to play: gap-based with remaining tiebreaker."""
     scored = []
     for c in cards:
         played = flags[c[0]].played[me]
@@ -350,7 +354,8 @@ def best_play(cards, flags, me):
         values_left = [x for x in CARDS if int(x) >= baseline]
         if baseline == 0:
             values_left = values_left[1:]
-        for other_c in flags[c[0]].played[1-me] + flags[c[0]].discards[:-1]:
+        # Remove ALL discards (we never draw from pile)
+        for other_c in flags[c[0]].played[1-me] + flags[c[0]].discards:
             v = other_c[1]
             if v in values_left:
                 values_left.remove(v)
@@ -364,9 +369,14 @@ def best_play(cards, flags, me):
         my_top = int(c[1])
         remaining = sum(int(v) + 1 for v in values_left if int(v) > my_top)
 
-        scored.append((-gap_cost, remaining, c))
+        if deck_size <= 8:
+            new_played = played + [c]
+            score_delta = score_expedition(new_played) - score_expedition(played)
+            scored.append((-gap_cost, score_delta, remaining, c))
+        else:
+            scored.append((-gap_cost, remaining, c))
     scored.sort(reverse=True)
-    return scored[0][2]
+    return scored[0][-1]
 
 
 def minimize_gap(cards, flags, me):
