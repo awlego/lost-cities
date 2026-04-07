@@ -344,7 +344,7 @@ class Challenger(Player):
 
 
 def best_play(cards, flags, me, deck_size=44):
-    """Pick the best card to play: gap-based with remaining tiebreaker."""
+    """Pick the best card to play: gap-based with marginal score delta influence."""
     scored = []
     for c in cards:
         played = flags[c[0]].played[me]
@@ -369,12 +369,18 @@ def best_play(cards, flags, me, deck_size=44):
         my_top = int(c[1])
         remaining = sum(int(v) + 1 for v in values_left if int(v) > my_top)
 
+        # Score delta: marginal influence at all deck sizes
+        new_played = played + [c]
+        score_delta = score_expedition(new_played) - score_expedition(played)
+
         if deck_size <= 8:
-            new_played = played + [c]
-            score_delta = score_expedition(new_played) - score_expedition(played)
-            scored.append((-gap_cost, score_delta, remaining, c))
+            # Endgame: stronger score delta influence
+            combined = -gap_cost + 0.05 * score_delta
+            scored.append((combined + 0.3 * score_delta, remaining, c))
         else:
-            scored.append((-gap_cost, remaining, c))
+            # Non-endgame: tiny score delta influence
+            combined = -gap_cost + 0.05 * score_delta
+            scored.append((combined, remaining, c))
     scored.sort(reverse=True)
     return scored[0][-1]
 
