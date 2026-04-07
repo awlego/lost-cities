@@ -338,11 +338,12 @@ class Challenger(Player):
 
 
 def best_play(cards, flags, me):
-    """Pick the best card to play: minimize gap, break ties by suit potential."""
+    """Pick the best card to play: gap-based with remaining tiebreaker.
+    Primary: minimize sqrt-compressed gap * mult^0.7
+    Tiebreaker: maximize value-weighted remaining above played card."""
     scored = []
     for c in cards:
         played = flags[c[0]].played[me]
-        # Compute gap (same as minimize_gap)
         baseline = -1
         if played:
             baseline = int(played[-1][1])
@@ -354,17 +355,12 @@ def best_play(cards, flags, me):
             if v in values_left:
                 values_left.remove(v)
         idx = values_left.index(c[1])
-        # Sqrt-compressed gap: compresses value differences so the remaining-
-        # potential tiebreaker has more influence on suit selection
         gap_cost = sum((int(v) + 1) ** 0.5 for v in values_left[:idx])
-
-        # Multiplier amplifies gap cost: contracts make skipped cards hurt more
         mult = 1 + sum(1 for p in played if p[1] == '0')
         if c[1] == '0':
             mult += 1
         gap_cost *= mult ** 0.7
 
-        # Value-weighted remaining
         my_top = int(c[1])
         remaining = sum(int(v) + 1 for v in values_left if int(v) > my_top)
 
