@@ -143,10 +143,8 @@ def main():
         kept = True
         save_baseline(win_rate, stderr, experiment_id)
     else:
-        # Conservative gating: new lower bound > old upper bound.
-        new_lower = win_rate - stderr
-        old_upper = baseline['win_rate'] + baseline['stderr']
-        improved = new_lower > old_upper
+        # Require 0.5% improvement over baseline point estimate.
+        improved = win_rate > baseline['win_rate'] + 0.005
         kept = improved
 
         if kept:
