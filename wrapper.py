@@ -7,6 +7,18 @@ from classes import Player
 from players import *
 
 
+def _all_player_subclasses():
+    """Walk the Player subclass tree recursively (direct subclasses only
+    ignores nested variants like NashPGv2)."""
+    seen = []
+    stack = list(Player.__subclasses__())
+    while stack:
+        cls = stack.pop()
+        seen.append(cls)
+        stack.extend(cls.__subclasses__())
+    return seen
+
+
 def run_batch(args_tuple):
     """Run a batch of rounds in a worker process."""
     (player_name_1, player_name_2, name_1, name_2,
@@ -22,7 +34,7 @@ def run_batch(args_tuple):
 
     random.seed(seed)
 
-    available = {cls.get_name(): cls for cls in Player.__subclasses__()}
+    available = {cls.get_name(): cls for cls in _all_player_subclasses()}
     players = [available[player_name_1](0), available[player_name_2](1)]
     names_orig = [name_1, name_2]
     names_rev = [name_2, name_1]
@@ -45,7 +57,7 @@ def run_batch(args_tuple):
 
 
 availablePlayers = {}
-for playerSubClass in Player.__subclasses__():
+for playerSubClass in _all_player_subclasses():
     availablePlayers[playerSubClass.get_name()] = playerSubClass
 
 if __name__ == '__main__':

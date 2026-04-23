@@ -39,13 +39,16 @@ class _CategoricalMasked(Categorical):
 class _NashPGNetwork(nn.Module):
     def __init__(self, info_state_size, num_actions,
                  actor_hidden_layers_sizes=(128, 128),
-                 critic_hidden_layers_sizes=(128, 128)):
+                 critic_hidden_layers_sizes=(128, 128),
+                 use_layer_norm=False):
         super().__init__()
         self.num_actions = num_actions
         actor_layers = []
         in_size = info_state_size
         for h in actor_hidden_layers_sizes:
             actor_layers.append(_layer_init(nn.Linear(in_size, h)))
+            if use_layer_norm:
+                actor_layers.append(nn.LayerNorm(h))
             actor_layers.append(nn.ReLU())
             in_size = h
         actor_layers.append(_layer_init(nn.Linear(in_size, num_actions), std=0.01))
@@ -135,6 +138,10 @@ def _score_expedition(cards_lc):
 # ---------------------------------------------------------------------------
 
 class NashPG(Player):
+    # Subclasses override this to pin a specific bundled checkpoint. When None,
+    # NASHPG_CHECKPOINT env var (or the default path below) is used.
+    CHECKPOINT_DIR = None
+
     @classmethod
     def get_name(cls):
         return 'nashpg'
@@ -143,15 +150,19 @@ class NashPG(Player):
         super().__init__(p)
         self._player_id = p
 
-        checkpoint_dir = os.environ.get('NASHPG_CHECKPOINT')
-        if not checkpoint_dir:
-            # Default to the bundled checkpoint.
-            default = pathlib.Path(__file__).parent / 'nashpg-checkpoints' / 'v2_1024x2_mc0.2'
-            if default.exists():
-                checkpoint_dir = str(default)
-            else:
-                raise ValueError(
-                    'Set NASHPG_CHECKPOINT=/path/to/checkpoint to use the NashPG player')
+        if self.CHECKPOINT_DIR is not None:
+            checkpoint_dir = str(pathlib.Path(__file__).parent
+                                 / 'nashpg-checkpoints' / self.CHECKPOINT_DIR)
+        else:
+            checkpoint_dir = os.environ.get('NASHPG_CHECKPOINT')
+            if not checkpoint_dir:
+                # Default to the latest bundled checkpoint.
+                default = pathlib.Path(__file__).parent / 'nashpg-checkpoints' / 'v5_512x2_mc0.2_ln'
+                if default.exists():
+                    checkpoint_dir = str(default)
+                else:
+                    raise ValueError(
+                        'Set NASHPG_CHECKPOINT=/path/to/checkpoint to use the NashPG player')
 
         checkpoint_dir = pathlib.Path(checkpoint_dir)
 
@@ -165,7 +176,8 @@ class NashPG(Player):
         # Critic not needed for inference, but we only load actor anyway.
 
         self._network = _NashPGNetwork(
-            _INFO_STATE_SIZE, _NUM_ACTIONS, actor_sizes)
+            _INFO_STATE_SIZE, _NUM_ACTIONS, actor_sizes,
+            use_layer_norm=config.get('layer_norm', False))
         data = torch.load(checkpoint_dir / 'nash_pg.pt', weights_only=True)
         # Load only the actor weights (ignore critic / optimizer / etc).
         actor_state = {k: v for k, v in data['network'].items()
@@ -499,3 +511,21 @@ class NashPG(Player):
                 mask[_DRAW_ACTION_OFFSET + 1 + s] = True
 
         return mask
+
+
+class NashPGv2(NashPG):
+    """1024x2, no LayerNorm, trained to ~100k updates (Apr 3)."""
+    CHECKPOINT_DIR = 'v2_1024x2_mc0.2'
+
+    @classmethod
+    def get_name(cls):
+        return 'nashpg_v2'
+
+
+class NashPGv5(NashPG):
+    """512x2 + LayerNorm + lr decay, trained to 1M updates (Apr 22)."""
+    CHECKPOINT_DIR = 'v5_512x2_mc0.2_ln'
+
+    @classmethod
+    def get_name(cls):
+        return 'nashpg_v5'
